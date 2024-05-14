@@ -16,7 +16,7 @@ Types.Super = setmetatable({}, { __tostring = function () return "Super" end})
 --[[ Common ]]
 export type Table<Key, Value> = {[Key]: Value}
 export type AnyTable = Table<any, any>
-export type Pass<T> = (...any) -> ()
+export type Pass<Return...> = (...any) -> (Return...)
 
 
 --[[ ConfigureInfo ]]
@@ -50,11 +50,12 @@ export type ClassStruct = {
 	__methods__: AnyTable,
 	__metamethods__: ClassMetamethods,
 	
+	__new__: ObjectConstructor,
 	__get__: (class: Class, index: any) -> (any, AnyTable?)
 }
 export type ClassMeta = {
-	__call: ObjectConstructor,
-	__index: (Class, any) -> any?,
+	__call: ObjectConstructor & Pass<any>,
+	__index: (Class, any) -> any,
 	__newindex: (Class, any, any) -> (),
 	__tostring: (Class) -> string
 }
@@ -62,7 +63,7 @@ export type Class = typeof(setmetatable({} :: ClassStruct, {} :: ClassMeta))
 
 
 --[[ Object ]]
-export type ObjectConstructor = ({class: Class}) -> Object
+export type ObjectConstructor = (class: Class, ...any) -> Object
 export type Object = {
 	__type__: typeof(Types.Object),
 	__class__: Class,
@@ -70,7 +71,7 @@ export type Object = {
 }
 
 
---[[ Super-Context ]]
+--[[ Super ]]
 type SuperStruct = {
 	__type__: typeof(Types.Super),
 	__object__: Object,

@@ -7,7 +7,7 @@ local Types = require(script.Types)
 
 export type Class = Types.Class
 export type Object = Types.Object
-export type Pass<Return> = Types.Pass<Return>
+export type Pass<Return...> = Types.Pass<Return...>
 
 type Table<Key, Value> = Types.Table<Key, Value>
 
@@ -18,7 +18,7 @@ type ClassModule = {
 	configure: (class: Class) -> Types.SetupMethod,
 
 	mro: (class: Class) -> {[number]: Class},
-	super: (class: Class, object: Types.Object) -> (),
+	super: (class: Class, object: Types.Object) -> Types.Super,
 
 	typeof: (value: any) -> (string | {})
 }
@@ -55,12 +55,6 @@ local function NewIndex(class: Class, index: any, value: any)
 	end
 end
 
-local function IndexMetamethod(tbl: Types.ClassMetamethods, index: any)
-	local method = tbl.lua[index]
-	if method ~= nil then return method end
-	return tbl.native[index]
-end
-
 local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 	return function (impl: Types.AnyTable)
 		local class = info.class
@@ -68,13 +62,6 @@ local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 		
 		class.__static__ = {}
 		class.__methods__ = {}
-		class.__metamethods__ = setmetatable({
-			lua = {},
-			native = {}
-		}, {
-			__index = IndexMetamethod,
-			__iter = Utils.tableIterator
-		})
 		
 		for key, value in impl do
 			local valueType = Class.typeof(value)
@@ -95,10 +82,11 @@ local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 			end
 		end
 		
+		class.__new__ = Object.new
 		class.__get__ = Retrieve
 		
 		local meta = {}
-		meta.__call = Object.new
+		meta.__call = class.__new__
 		meta.__index = Index
 		meta.__newindex = NewIndex
 		setmetatable(class :: any, meta)
@@ -108,8 +96,16 @@ local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 end
 
 local function Inherit(info: Types.ConfigureInfo, ...: Class)
-	local class = info.class
-	class.__mro__ = Utils.Linearize(class, ...)
+	local neglected = info.class
+	neglected.__mro__ = Utils.Linearize(neglected, ...)
+	
+	local metamethods = neglected.__metamethods__
+	local superClass = neglected.__mro__[2]
+	if superClass then
+		local superMetas = superClass.__metamethods__
+		metamethods.lua = table.clone(superMetas.lua)
+	end
+	
 	return Implement(info)
 end
 
@@ -124,6 +120,12 @@ local SetupClass: Types.SetupMethod = nil do
 			error(`INVALID TYPE({argType}): SETUP FAILED!`)
 		end
 	end
+end
+
+local function IndexMetamethod(tbl: Types.ClassMetamethods, index: any)
+	local method = tbl.lua[index]
+	if method ~= nil then return method end
+	return tbl.native[index]
 end
 
 function Class.new(name: string)
@@ -142,6 +144,14 @@ function Class.new(name: string)
 	}) :: Class
 	
 	neglected.__mro__ = {neglected}
+	neglected.__metamethods__ = setmetatable({
+		lua = {},
+		native = {}
+	}, {
+		__index = IndexMetamethod,
+		__iter = Utils.tableIterator
+	})
+	
 	return neglected
 end
 
@@ -158,13 +168,14 @@ function Class.mro(class: Class)
 end
 
 function Class.super(class: Class, object: Types.Object)
-	local mro = object.__class__.__mro__
+	local main = object.__class__
+	local mro = main.__mro__
 	local offset = table.find(mro, class)
 	
 	if offset == nil then
 		error("WRITE AN ERROR HERE")
 	end
-	return Super(object, offset)
+	return Super(object, offset + 1)
 end
 
 function Class.typeof(value: any)
