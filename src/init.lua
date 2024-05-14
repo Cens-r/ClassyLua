@@ -26,6 +26,7 @@ type ClassModule = {
 local Class = {} :: ClassModule
 Class.CLASS = Types.Class
 Class.NEGLECTED = Types.NeglectedClass
+Class.OBJECT = Types.Object
 
 local function Retrieve(class: Class, index: any): (any, Types.AnyTable?)
 	local static = class.__static__[index]

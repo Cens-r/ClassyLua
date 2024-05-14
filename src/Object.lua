@@ -14,7 +14,6 @@ type ObjectModule = {
 }
 
 local Object = {} :: ObjectModule
-Object.TYPE = Types.Object
 
 function Object.GetEnvironment(object: Object, class: Types.Class)
 	class = class or object.__class__
@@ -67,7 +66,7 @@ Object.Metamethods = {
 
 function Object.new(class: Types.Class, ...: any)
 	local struct = {
-		__type__ = Object.TYPE,
+		__type__ = Types.Object,
 		__class__ = class,
 		__environments__ = {}
 	}
