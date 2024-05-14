@@ -57,7 +57,7 @@ function Object.NewIndex(object, index, value, context)
 		source[index] = value
 		return
 	end
-	warn("NO SOURCE LOCATION GIVEN! VALUE DROPPED!")
+	warn(`[Class<{object.__class__.__name__}>] The value for index ({index}) was dropped, the object didn't retrieve a source!`)
 end
 
 Object.Metamethods = {

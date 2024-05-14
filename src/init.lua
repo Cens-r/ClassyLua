@@ -15,7 +15,7 @@ type ClassModule = {
 	TYPE: typeof(Types.Class),
 	
 	new: (name: string) -> Class,
-	configure: (class: Class) -> Types.SetupMethod,
+	configure: (class: Class, bypass: boolean?) -> Types.SetupMethod,
 
 	mro: (class: Class) -> {[number]: Class},
 	super: (class: Class, object: Types.Object) -> Types.Super,
@@ -135,8 +135,8 @@ function Class.new(name: string)
 	}
 	
 	local neglected = setmetatable(struct, {
-		__call = function ()
-			error("Attempted to create an object from a neglected class!")
+		__call = function (this: Class)
+			error(`[Class<{this.__name__}>] Attempted to construct an object from a Neglected class!`)
 		end,
 		__tostring = function (this: Class)
 			return `{this}<{this.__name__}>`
@@ -155,7 +155,10 @@ function Class.new(name: string)
 	return neglected
 end
 
-function Class.configure(class: Class)
+function Class.configure(class: Class, bypass: boolean?)
+	if (not bypass) and (class.__type__ == Types.NeglectedClass) then
+		warn(`[Class<{class.__name__}>] Configuring a class that has already been implemented! Use the 'bypass' parameter to silence this warning.`, debug.traceback())
+	end
 	local info = { class = class }
 	setmetatable(info, {
 		__call = SetupClass
@@ -172,8 +175,8 @@ function Class.super(class: Class, object: Types.Object)
 	local mro = main.__mro__
 	local offset = table.find(mro, class)
 	
-	if offset == nil then
-		error("WRITE AN ERROR HERE")
+	if offset == nil  then
+		error(`[Class<{main.__name__}>] The class provided to 'Class.super()' was not found within the object's inheritance path!`)
 	end
 	return Super(object, offset + 1)
 end
