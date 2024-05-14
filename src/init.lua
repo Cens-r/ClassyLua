@@ -12,7 +12,9 @@ export type Pass<Return...> = Types.Pass<Return...>
 type Table<Key, Value> = Types.Table<Key, Value>
 
 type ClassModule = {
-	TYPE: typeof(Types.Class),
+	CLASS: typeof(Types.Class),
+	NEGLECTED: typeof(Types.NeglectedClass),
+	OBJECT: typeof(Types.Object),
 	
 	new: (name: string) -> Class,
 	configure: (class: Class, bypass: boolean?) -> Types.SetupMethod,
@@ -24,8 +26,8 @@ type ClassModule = {
 }
 
 local Class = {} :: ClassModule
-Class.CLASS = Types.Class
 Class.NEGLECTED = Types.NeglectedClass
+Class.CLASS = Types.Class
 Class.OBJECT = Types.Object
 
 local function Retrieve(class: Class, index: any): (any, Types.AnyTable?)
