@@ -24,7 +24,8 @@ type ClassModule = {
 }
 
 local Class = {} :: ClassModule
-Class.TYPE = Types.Class
+Class.CLASS = Types.Class
+Class.NEGLECTED = Types.NeglectedClass
 
 local function Retrieve(class: Class, index: any): (any, Types.AnyTable?)
 	local static = class.__static__[index]
@@ -58,7 +59,7 @@ end
 local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 	return function (impl: Types.AnyTable)
 		local class = info.class
-		class.__type__ = Class.TYPE
+		class.__type__ = Class.CLASS
 		
 		class.__static__ = {}
 		class.__methods__ = {}
@@ -112,7 +113,7 @@ end
 local SetupClass: Types.SetupMethod = nil do
 	function SetupClass(info: Types.ConfigureInfo, arg: any, ...: Class): (Class | Types.ImplementMethod)
 		local argType = Class.typeof(arg)
-		if argType == Class.TYPE or argType == "nil" then
+		if argType == Class.CLASS or argType == "nil" then
 			return Inherit(info, arg, ...)
 		elseif argType == "table" then
 			return Implement(info)(arg)
@@ -156,7 +157,7 @@ function Class.new(name: string)
 end
 
 function Class.configure(class: Class, bypass: boolean?)
-	if (not bypass) and (class.__type__ == Types.NeglectedClass) then
+	if (not bypass) and (class.__type__ == Class.CLASS) then
 		warn(`[Class<{class.__name__}>] Configuring a class that has already been implemented! Use the 'bypass' parameter to silence this warning.`, debug.traceback())
 	end
 	local info = { class = class }
