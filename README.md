@@ -52,7 +52,7 @@ Class.configure(MyClass) {
 local object = MyClass(5)
 
 -- Accessing that object's value attribute
-print(object.Value) -- Output: 5
+print(object.value) -- Output: 5
 
 -- Accessing our static variable
 print(MyClass.count)
