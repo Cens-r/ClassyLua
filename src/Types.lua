@@ -44,14 +44,15 @@ export type ClassStruct = {
 	__type__: typeof(Types.Class) | typeof(Types.NeglectedClass),
 	__name__: string,
 	
+	__cache__: Table<string, AnyTable>,
 	__mro__: Table<number, Class>,
+	__mrosize__: number,
 	
-	__static__: AnyTable,
-	__methods__: AnyTable,
+	__values__: AnyTable,
 	__metamethods__: ClassMetamethods,
 	
 	__new__: ObjectConstructor,
-	__get__: (class: Class, index: any) -> (any, AnyTable?)
+	__get__: (Class, any, boolean?) -> (any, AnyTable?)
 }
 export type ClassMeta = {
 	__call: ObjectConstructor & Pass<any>,
@@ -67,21 +68,19 @@ export type ObjectConstructor = (class: Class, ...any) -> Object
 export type Object = {
 	__type__: typeof(Types.Object),
 	__class__: Class,
+	
+	__cache__: Table<string, AnyTable>,
 	__environments__: Table<Class, AnyTable>
 }
 
 
 --[[ Super ]]
-type SuperStruct = {
+export type Super = {
 	__type__: typeof(Types.Super),
+	__cache__: Table<string, AnyTable>,
 	__object__: Object,
 	__offset__: number
 }
-type SuperMeta = {
-	__index: (Super, any) -> any,
-	__newindex: (Super, any, any) -> ()
-}
-export type Super = typeof(setmetatable({} :: SuperStruct, {} :: SuperMeta))
 
 
 return Types

@@ -1,14 +1,16 @@
+--!strict
+
 local Types = require(script.Parent.Types)
 export type Object = Types.Object
 
-type ObjectModule = {
+type ObjectModule = { 
 	new: Types.ObjectConstructor,
+	search: (Object | Types.Super, any, boolean?) -> (any, Types.AnyTable, boolean?),
 	
-	GetEnvironement: (object: Object, class: Types.Class) -> Types.AnyTable,
-	Retrieve: (object: Object, index: any, context: Types.Super?) -> (any, Types.AnyTable),
+	GetEnvironment: (Object, Types.Class) -> Types.AnyTable,
 	
-	Index: (object: Object, index: any, context: Types.Super?) -> any,
-	NewIndex: (object: Object, index: any, value: any, context: Types.Super?) -> (),
+	Index: (Object | Types.Super, any) -> any,
+	NewIndex: (Object | Types.Super, any, any) -> nil,
 	
 	Metamethods: {}
 }
@@ -25,38 +27,70 @@ function Object.GetEnvironment(object: Object, class: Types.Class)
 	return env
 end
 
-function Object.get(object, index, context)
-	local offset = (context and context.__offset__) or 1
-
-	local main = object.__class__
+function Object.search(subject: Object | Types.Super, index: any, skipCache : boolean?)
+	local cache = subject.__cache__ :: {}
+	if (not skipCache) and (cache ~= nil) then
+		local source = cache[index]
+		if source ~= nil then return source[index], source end
+	end
+	
+	local object, offset = subject, 1
+	if subject.__type__ == Types.Super then
+		object = (subject :: Types.Super).__object__
+		offset = (subject :: Types.Super).__offset__
+	end
+	
+	local main = (object :: Object).__class__
 	local mro = main.__mro__
-	local size = table.maxn(mro)
-
+	local size = main.__mrosize__
+	
+	local source, value = nil, nil
 	for num = offset, size do
 		local class = mro[num]
-
-		local env = Object.GetEnvironment(object, class)
-		local attribute = env[index]
-		if attribute ~= nil then return attribute, env end
-
-		local value = class:__get__(index, (context or object))
-		if value ~= nil then return value end
+		
+		source = Object.GetEnvironment((object :: Object), class)
+		value = source[index]
+		if value ~= nil then break end
+		
+		local env = nil
+		source = (nil :: any)
+		value, env = class:__get__(index, skipCache)
+		if value ~= nil then
+			if not skipCache then
+				mro[offset].__cache__[index] = (env :: any)
+			end
+			skipCache = true
+			break
+		end
+		source = (nil :: any)
 	end
-	return nil, Object.GetEnvironment(object, mro[offset])
+	
+	source = source or Object.GetEnvironment(object :: Object, mro[offset])
+	return value, source, skipCache
 end
 
-function Object.Index(object, index, context)
-	local value = Object.get(object, index, context)
+function Object.Index(object, index)
+	local value, source, skipCache = Object.search(object, index)
+	if (not skipCache) and (value ~= nil) then
+		(object.__cache__ :: {})[index] = source
+	end
 	return value
 end
 
-function Object.NewIndex(object, index, value, context)
-	local _, source = Object.get(object, index, context)
+function Object.NewIndex(object, index, value)
+	local _, source, skipCache = Object.search(object, index)
 	if source ~= nil then
 		source[index] = value
-		return
+		if (value ~= nil) and (not skipCache) then
+			(object.__cache__ :: {})[index] = source
+		end
+		return nil
 	end
-	warn(`[Class<{object.__class__.__name__}>] The value for index ({index}) was dropped, the object didn't retrieve a source!`)
+	
+	if object.__type__ == Types.Super then
+		object = (object :: Types.Super).__object__
+	end
+	return warn(`[Class<{(object :: Object).__class__.__name__}>] The value for index ({index}) was dropped, the object didn't retrieve a source!`)
 end
 
 Object.Metamethods = {
@@ -68,6 +102,8 @@ function Object.new(class: Types.Class, ...: any)
 	local struct = {
 		__type__ = Types.Object,
 		__class__ = class,
+		
+		__cache__ = {},
 		__environments__ = {}
 	}
 	
@@ -82,7 +118,7 @@ function Object.new(class: Types.Class, ...: any)
 	if metamethods.__init then
 		metamethods.__init(object, ...)
 	end
-	return object
+	return (object :: any) :: Object
 end
 
 return Object
