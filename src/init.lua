@@ -1,7 +1,6 @@
 --!strict
 
 local Object = require(script.Object)
-local Super = require(script.Super)
 local Utils = require(script.Utils)
 local Types = require(script.Types)
 
@@ -15,52 +14,53 @@ type ClassModule = {
 	CLASS: typeof(Types.Class),
 	NEGLECTED: typeof(Types.NeglectedClass),
 	OBJECT: typeof(Types.Object),
+	SUPER: typeof(Types.Super),
 	
-	new: (name: string) -> Class,
-	configure: (class: Class, bypass: boolean?) -> Types.SetupMethod,
+	new: (string) -> Class,
+	configure: (Class, boolean?) -> Types.SetupMethod,
 
 	search: (Class, any, boolean?) -> (any, Types.AnyTable?),
-
-	mro: (class: Class) -> {[number]: Class},
-	super: (class: Class, object: Types.Object) -> Types.Super,
-
-	typeof: (value: any) -> (string | {})
+	super: (Class, Types.Object | Types.Super) -> Types.Super,
+	typeof: (any) -> (string | {}),
+	
+	debugPrint: (Class) -> ()
 }
 
 local Class = {} :: ClassModule
+
 Class.NEGLECTED = Types.NeglectedClass
 Class.CLASS = Types.Class
 Class.OBJECT = Types.Object
+Class.SUPER = Types.Super
 
 function Class.search(class: Class, index: any, skipCache: boolean?)
 	if not skipCache then
-		local source = class.__cache__[index]
-		if source then  return source[index], source end
+		local source = class.__cache[index]
+		if source then return source[index], source end
 	end
-	local value = class.__values__[index]
-	if value ~= nil then return value, class.__values__ end
-	local metamethod = class.__metamethods__[index]
-	if metamethod ~= nil then return metamethod, (class.__metamethods__ :: any) end
+	local value = class.__self[index]
+	if value ~= nil then return value, class.__self end
 	return nil, nil
 end
 
-local function Index(class: Class, index: any): any
-	for _, base in Class.mro(class) do
+local function Index(class: Class, index: any, offset: number?): any
+	for num = (offset or 1), class.__mrosize do
+		local base = class.__mro[num]
 		local value, source = Class.search(base, index)
 		if value == nil then continue end
-		class.__cache__[index] = (source :: any)
+		class.__cache[index] = (source :: any)
 		return value
 	end
 	return nil
 end
 
-local function NewIndex(class: Class, index: any, value: any)
-	for _, base in Class.mro(class) do
-		local value, source = base:__get__(index)
+local function NewIndex(class: Class, index: any, value: any, offset: number?)
+	for num = (offset or 1), class.__mrosize do
+		local base = class.__mro[num]
+		local current, source = Class.search(base, index)
 		if source ~= nil then
 			source[index] = value
-			class.__cache__[index] = if (value ~= nil) then (source :: any) else nil
-			break
+			class.__cache[index] = if (current ~= nil) then (source :: any) else nil
 		end
 	end
 end
@@ -68,49 +68,45 @@ end
 local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 	return function (impl: Types.AnyTable)
 		local class = info.class
-		class.__type__ = Class.CLASS
+		class.__type = Class.CLASS
 		
-		class.__cache__ = {}
-		class.__values__ = {}
+		class.__self = setmetatable({}, { __index = class.__metamethods }) :: any
+		class.__cache = {}
 		
+		local metamethods = class.__metamethods
 		for key, value in impl do
 			local valueType = Class.typeof(value)
 			if valueType == "function" then
-				local _, count = key:gsub("__", "")
-				if count == 1 then
-					local metamethods = class.__metamethods__
+				if key:sub(1, 2) == "__" then
 					if Utils.LuaMetamethods[key] then
 						metamethods.lua[key] = value
 					else
 						metamethods.native[key] = value
 					end
+					continue
 				end
 			end
-			class.__values__[key] = value
+			class.__self[key] = value
 		end
 		
-		class.__new__ = Object.new
-		class.__get__ = Class.search
+		class.__new = Object.new
 		
-		local meta = {}
-		meta.__call = class.__new__
+		local meta = getmetatable(class)
 		meta.__index = Index
 		meta.__newindex = NewIndex
-		setmetatable(class :: any, meta)
-		
-		return class
+		return setmetatable(class :: any, meta)
 	end
 end
 
 local function Inherit(info: Types.ConfigureInfo, ...: Class)
 	local neglected = info.class
-	neglected.__mro__ = Utils.Linearize(neglected, ...)
-	neglected.__mrosize__ = table.maxn(neglected.__mro__)
+	neglected.__mro = Utils.Linearize(neglected, ...)
+	neglected.__mrosize = table.maxn(neglected.__mro)
 	
-	local metamethods = neglected.__metamethods__
-	local superClass = neglected.__mro__[2]
+	local metamethods = neglected.__metamethods
+	local superClass = neglected.__mro[2]
 	if superClass then
-		local superMetas = superClass.__metamethods__
+		local superMetas = superClass.__metamethods
 		metamethods.lua = table.clone(superMetas.lua)
 	end
 	
@@ -138,22 +134,19 @@ end
 
 function Class.new(name: string)
 	local struct = {
-		__type__ = Types.NeglectedClass,
-		__name__ = name
+		__type = Types.NeglectedClass,
+		__name = name
 	}
 	
-	local neglected = setmetatable(struct, {
-		__call = function (this: Class)
-			error(`[Class<{this.__name__}>] Attempted to construct an object from a Neglected class!`)
-		end,
+	local neglected: Class = setmetatable(struct, {
 		__tostring = function (this: Class)
-			return `{this}<{this.__name__}>`
+			return `{this.__type}<{this.__name}>`
 		end,
-	}) :: Class
+	}) :: any
 	
-	neglected.__mro__ = {neglected}
-	neglected.__mrosize__ = 1
-	neglected.__metamethods__ = setmetatable({
+	neglected.__mro = {neglected}
+	neglected.__mrosize = 1
+	neglected.__metamethods = setmetatable({
 		lua = {},
 		native = {}
 	}, {
@@ -175,35 +168,59 @@ function Class.configure(class: Class, bypass: boolean?)
 	return (info :: any) :: Types.SetupMethod
 end
 
-function Class.mro(class: Class)
-	return table.clone(class.__mro__)
+local function SuperIndex(super: Types.Super, index: any)
+	local object = super.__object
+	local value = rawget(object.__self, index)
+	if value ~= nil then return value end
+	return Index(object.__class, index, super.__offset)
+end
+local function SuperNewIndex(super: Types.Super, index: any, value: any)
+	local object = super.__object
+	local attribute = rawget(object.__self, index)
+	if attribute ~= nil then
+		object[index] = value
+		return
+	end
+	return NewIndex(object.__class, index, value, super.__offset)
 end
 
-function Class.super(class: Class, object: Types.Object | Types.Super)
-	if object.__type__ == Types.Super then
-		object = (object :: Types.Super).__object__
+function Class.super(class: Class, subject: Types.Object | Types.Super)
+	local object = subject
+	if subject.__type == Types.Super then
+		object = (subject :: Types.Super).__object
 	end
 	
-	local main = (object :: Types.Object).__class__
-	local mro = main.__mro__
+	local main = (object :: Types.Object).__class
+	local mro = main.__mro
 	local offset = table.find(mro, class)
 	
 	if offset == nil then
-		error(`[Class<{main.__name__}>] The class provided to 'Class.super()' was not found within the object's inheritance path!`)
-	elseif offset > main.__mrosize__ then
-		error(`[Class<{main.__name__}>] The offset calculated for 'Class.super()' was out of the bounds of the class's mro!`)
+		error(`[Class<{main.__name}>] The class provided to 'Class.super()' was not found within the object's inheritance path!`)
+	elseif offset > main.__mrosize then
+		error(`[Class<{main.__name}>] The offset calculated for 'Class.super()' was out of the bounds of the class's mro!`)
 	end
 	
-	return Super((object :: Types.Object), offset + 1)
+	local super: Types.Super = setmetatable({
+		__type = Types.Super,
+		__object = object,
+		__offset = offset + 1
+	}, { __index = SuperIndex, __newindex = SuperNewIndex }) :: any
+	
+	return super
 end
 
 function Class.typeof(value: any)
 	local valueType = typeof(value)
 	if valueType == "table" then
-		local classType = value.__type__
+		local classType = value.__type
 		return classType or valueType
 	end
 	return valueType
+end
+
+function Class.debugPrint(class: Class)
+	local tbl = setmetatable(table.clone(class :: any), {})
+	print(tbl)
 end
 
 return Class

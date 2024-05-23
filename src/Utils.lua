@@ -69,7 +69,7 @@ function Utils.Linearize(class: Types.Class, ...: Types.Class)
 		local candidate: Types.Class? = nil
 		for baseIndex = 1, argCount do
 			local base = args[baseIndex]
-			local baseMro = base.__mro__
+			local baseMro = base.__mro
 			local baseOffset = GetOffset(base)
 
 			candidate = baseMro[1 + baseOffset]
@@ -77,7 +77,7 @@ function Utils.Linearize(class: Types.Class, ...: Types.Class)
 				local compare = args[compareIndex]
 				if base == compare then continue end
 
-				local compareMro = compare.__mro__
+				local compareMro = compare.__mro
 				local compareOffset = GetOffset(compare) + 2
 
 				local compareMroLength = #compareMro
@@ -102,7 +102,7 @@ function Utils.Linearize(class: Types.Class, ...: Types.Class)
 
 		for argIndex = argCount, 1, -1 do
 			local base = args[argIndex]
-			local mro = base.__mro__
+			local mro = base.__mro
 			local offset = GetOffset(base) + 1
 
 			if mro[offset] == candidate then

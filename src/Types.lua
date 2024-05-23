@@ -41,21 +41,19 @@ export type MetamethodMeta = {
 export type ClassMetamethods = typeof(setmetatable({} :: MetamethodStruct, {} :: MetamethodMeta)) 
 
 export type ClassStruct = {
-	__type__: typeof(Types.Class) | typeof(Types.NeglectedClass),
-	__name__: string,
+	__type: typeof(Types.Class) | typeof(Types.NeglectedClass),
+	__name: string,
 	
-	__cache__: Table<string, AnyTable>,
-	__mro__: Table<number, Class>,
-	__mrosize__: number,
+	__mro: Table<number, Class>,
+	__mrosize: number,
 	
-	__values__: AnyTable,
-	__metamethods__: ClassMetamethods,
+	__self: AnyTable,
+	__cache: Table<string, AnyTable>,
+	__metamethods: ClassMetamethods,
 	
-	__new__: ObjectConstructor,
-	__get__: (Class, any, boolean?) -> (any, AnyTable?)
+	__new: ObjectConstructor,
 }
 export type ClassMeta = {
-	__call: ObjectConstructor & Pass<any>,
 	__index: (Class, any) -> any,
 	__newindex: (Class, any, any) -> (),
 	__tostring: (Class) -> string
@@ -66,21 +64,17 @@ export type Class = typeof(setmetatable({} :: ClassStruct, {} :: ClassMeta))
 --[[ Object ]]
 export type ObjectConstructor = (class: Class, ...any) -> Object
 export type Object = {
-	__type__: typeof(Types.Object),
-	__class__: Class,
-	
-	__cache__: Table<string, AnyTable>,
-	__environments__: Table<Class, AnyTable>
+	__type: typeof(Types.Object),
+	__class: Class,
+	__self: AnyTable
 }
 
 
 --[[ Super ]]
 export type Super = {
-	__type__: typeof(Types.Super),
-	__cache__: Table<string, AnyTable>,
-	__object__: Object,
-	__offset__: number
+	__type: typeof(Types.Super),
+	__object: Object,
+	__offset: number
 }
-
 
 return Types
