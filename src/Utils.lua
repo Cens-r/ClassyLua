@@ -1,8 +1,13 @@
 --!strict
 
+-- Modules:
 local Types = require(script.Parent.Types)
+local Messages = require(script.Parent.Messages)
+
+-- Utils Module:
 local Utils = {}
 
+-- List of all the lua metamethods for reference
 Utils.LuaMetamethods = {
 	__index = true,
 	__newindex = true,
@@ -27,29 +32,61 @@ Utils.LuaMetamethods = {
 	__iter = true
 }
 
-function Utils.nextTable(tbl: any, index: any): (any, any)
-	local key, value = next(tbl, index)
-	if key == nil then return end
-	if type(value) ~= "table" then
-		return Utils.nextTable(tbl, key)
+
+local MissingID = "missingID"
+local ErrorSuffix = "\n(ID: %s)"
+
+--[[
+	Formats a message using its id to retrieve the message,
+	and the arguments provided to fill in placeholders.
+	
+	Returns the formatted message.
+]]
+local function parse(id: string, ...: any)
+	local message = Messages.__messages[id]
+	if message then
+		return message:format(...) .. ErrorSuffix:format(id)
 	end
-	return key, value
+	message = Messages.__messages[MissingID]
+	return (message :: any):format(id) ..ErrorSuffix:format(MissingID)
 end
 
-function Utils.tableIterator(tbl: any): () -> (any, any)
-	local nestedKey, nestedTbl = Utils.nextTable(tbl)
-	local key, value
-	return function ()
-		while nestedKey do
-			key, value = next(nestedTbl, key)
-			if key then return key, value end
-			nestedKey, nestedTbl = Utils.nextTable(tbl, nestedKey)
-			key, value = nil, nil
-		end
-		return nil, nil
-	end
+--[[
+	Custom warn method that parses the error ids given.
+	Takes in arguments to pass to `parse()`.
+]]
+function Utils.warn(id: string, ...: any)
+	local message = parse(id, ...)
+	warn(debug.traceback(message, 2))
 end
 
+--[[
+	Custom error method that parses the error ids given.
+	Takes in arguments to pass to `parse()`.
+]]
+function Utils.error(id: string, ...: any)
+	local message = parse(id, ...)
+	error(message)
+end
+
+--[[
+	Converts an Object or Super object to a specific string format.
+	Format: TYPE<ADDRESS>
+]]
+function Utils.tostring(subject: Types.Object | Types.Super)
+	local object = subject :: Types.Object
+	if object.__type == Types.Super then
+		object = (subject :: Types.Super).__object
+	end
+	return `{subject.__type}<{tostring(object.__self):sub(8)}>`
+end
+
+--[[
+	Linearizes a given set of classes using C3 Linearization.
+	Errors if no the set can't be linearized.
+	
+	Returns a predictable array of classes to be used for MRO.
+]]
 function Utils.Linearize(class: Types.Class, ...: Types.Class)
 	local result = {class}
 	local args = {...}
@@ -96,7 +133,7 @@ function Utils.Linearize(class: Types.Class, ...: Types.Class)
 		end
 
 		if not candidate then
-			error("Failed to linearize!")
+			return Utils.error(Messages.linearizeFailure)
 		end
 		table.insert(result, candidate)
 
@@ -116,5 +153,6 @@ function Utils.Linearize(class: Types.Class, ...: Types.Class)
 
 	return result
 end
+
 
 return Utils

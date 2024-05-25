@@ -1,80 +1,83 @@
 --!strict
---# selene: allow(multiple_statements)
 
 --[[
-	Contains all the typings for the Class module
+	Helper method to create custom type objects easier.
+	Converts a table to a given name when tostring() is called on it.
 ]]
+local function CustomType(name: string)
+	return setmetatable({}, {
+		__tostring = function ()
+			return name
+		end
+	})
+end
 
---[[ Type Objects ]]
 local Types = {}
-Types.NeglectedClass = setmetatable({}, { __tostring = function () return "NeglectedClass" end })
-Types.Class = setmetatable({}, { __tostring = function () return "Class" end })
-Types.Object = setmetatable({}, { __tostring = function () return "Object" end })
-Types.Super = setmetatable({}, { __tostring = function () return "Super" end})
 
+-- Type Objects:
+Types.NeglectedClass = CustomType("NeglectedClass")
+Types.Class = CustomType("Class")
+Types.Object = CustomType("Object")
+Types.Super = CustomType("Super")
 
---[[ Common ]]
+--[[ GENERIC TYPES ]]
+export type Pass<Return...> = (...any) -> (Return...) 
 export type Table<Key, Value> = {[Key]: Value}
-export type AnyTable = Table<any, any>
-export type Pass<Return...> = (...any) -> (Return...)
+export type AnyTable = Table<any, any> | typeof(setmetatable({} :: Table<any, any>, {} :: Table<any, any>))
 
-
---[[ ConfigureInfo ]]
-export type ImplementMethod = (AnyTable) -> Class
+--[[ CONFIGURE INFO ]]
+export type ImplementMethod = (Table<any, any>) -> Class
 export type InheritMethod = (...Class) -> ImplementMethod
 export type SetupMethod = InheritMethod & ImplementMethod
 
-type ConfigureStruct = { class: Class }
 type ConfigureMeta = { __call: SetupMethod }
+type ConfigureStruct = { __class: Class }
 export type ConfigureInfo = typeof(setmetatable({} :: ConfigureStruct, {} :: ConfigureMeta))
 
-
---[[ Class ]]
-export type MetamethodStruct = {
-	lua: AnyTable,
-	native: AnyTable
+--[[ CLASS ]]
+type ClassMeta = {
+	__index: Pass<any> | AnyTable,
+	__newindex: Pass<nil> | AnyTable,
+	__tostring: Pass<string>
 }
-export type MetamethodMeta = {
-	__index: (ClassMetamethods, any) -> any,
-	__iter: (ClassMetamethods) -> (() -> (any, any))
-}
-export type ClassMetamethods = typeof(setmetatable({} :: MetamethodStruct, {} :: MetamethodMeta)) 
-
-export type ClassStruct = {
-	__type: typeof(Types.Class) | typeof(Types.NeglectedClass),
+type ClassStruct = {
+	__type: typeof(Types.Class),
 	__name: string,
 	
-	__mro: Table<number, Class>,
+	__self: AnyTable,
+	__metamethods: AnyTable,
+	
+	__mro: {Class},
 	__mrosize: number,
 	
-	__self: AnyTable,
-	__cache: Table<string, AnyTable>,
-	__metamethods: ClassMetamethods,
-	
 	__new: ObjectConstructor,
-}
-export type ClassMeta = {
-	__index: (Class, any) -> any,
-	__newindex: (Class, any, any) -> (),
-	__tostring: (Class) -> string
+	__search: Pass<any>
 }
 export type Class = typeof(setmetatable({} :: ClassStruct, {} :: ClassMeta))
 
-
---[[ Object ]]
-export type ObjectConstructor = (class: Class, ...any) -> Object
-export type Object = {
+--[[ OBJECT ]]
+type ObjectMeta = {
+	__tostring: Pass<string>
+}
+type ObjectStruct = {
 	__type: typeof(Types.Object),
 	__class: Class,
 	__self: AnyTable
 }
+export type Object = typeof(setmetatable({} :: ObjectStruct, {} :: ObjectMeta))
+export type ObjectConstructor = (Class, ...any) -> Object
 
-
---[[ Super ]]
-export type Super = {
+--[[ SUPER ]]
+type SuperMeta = {
+	__index: Pass<any>,
+	__newindex: Pass<nil>,
+	__tostring: Pass<string>
+}
+type SuperStruct = {
 	__type: typeof(Types.Super),
 	__object: Object,
 	__offset: number
 }
+export type Super = typeof(setmetatable({} :: SuperStruct, {} :: SuperMeta))
 
 return Types
