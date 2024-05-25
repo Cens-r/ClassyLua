@@ -8,10 +8,10 @@ Lua lacks a proper class system and there are very few modules built to offer a 
 but not for more complex classes that need to inherit multiple classes. Mixins become seemingly out of the question as there's no proper way to inherit them all at once to a single class, and index shadowing can
 be a pain to deal with if you're trying to keep a proper order.
 
-ClassyLua abstracts all of that, letting you deal with implementing your classes while it takes care of the hassle of inheritance for you. Using [C3 Linearization](https://en.wikipedia.org/wiki/C3_linearization)
+ClassyLua abstracts away all of that, letting you deal with implementing your classes while it takes care of the hassle of inheritance for you. Using [C3 Linearization](https://en.wikipedia.org/wiki/C3_linearization)
 the module will construct a method resolution order (MRO) that keeps all the inherited classes in a predictable and well-defined order.
 
-With use of this MRO, ClassyLua offers you a handful of useful features such as:
+With the use of this MRO, ClassyLua offers you a handful of useful features such as:
 * `super()` - Access inherited classes directly
 * `is()` - Identify if a class or object is equivalent to or a subclass of a given class
 * `typeof()` - A more robust typeof method with support for ClassyLua
@@ -26,7 +26,7 @@ Creating and implementing classes in most programming languages fall under the s
 All classes start as a **NeglectedClass** at creation and will transition to a **Class** once fully implemented. To do these two actions there are two core methods within the module:
 - `Class.new(name: string?)` : Used to construct a new class. If the name is left blank a UUID will be generated in its place.
 
-- `Class.configure(class: Class, bypass: boolean?)` : Used to implement or configure a given class. Ideally, you should only be using the method as a first-time implementation of a class and it will warn you if the class has already been implemented. An optional second argument, "bypass" which is a boolean, acts as a means to silence this warning if you so wish. 
+- `Class.configure(class: Class, bypass: boolean?)` : Used to implement or configure a given class. Ideally, you should only be using the method as a first-time implementation of a class and it will warn you if the class has already been implemented. An optional second argument, "bypass" which is a boolean, acts as a means to silence this warning if you wish. 
 
 The two will likely be used together for most, if not all, class declarations so you should get comfortable with them.
 
@@ -35,12 +35,14 @@ Through the use of the two methods mentioned above, we can create a class. Throu
 It will also provide an example of the layout of the implementation table which will be provided to `Class.configure()`, so you can get familiar with how that works.
 
 ### Construction
-As explained before, to construct a class its as simple as calling `Class.new()` and providing it with a name. It's important to note that currently the class is considered a **NeglectedClass** which means it has not been implemented yet, and will need to be implemented before you can start using/indexing it.
+As explained before, to construct a class it's as simple as calling `Class.new()` and providing it with a name. It's important to note that currently the class is considered a **NeglectedClass** which means it has not been implemented yet and will need to be implemented before you can start using/indexing it.
 ```lua
 local Class = require(PATH.TO.ClassyLua)
 local MyClass = Class.new("MyClass") --> Provide a name to identify your class
 ```
 ### Implementation
+To implement your class you will make use of the `Class.configure()` method. This stages your class as **ConfigureInfo** which is just used internally, and returns an "overloaded" function, which takes care of either inheritance or implementation depending on the argument(s) passed. For this example, we will just be implementing:
+
 ```lua
 Class.configure(MyClass) {
 
