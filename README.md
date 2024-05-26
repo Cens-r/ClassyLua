@@ -15,6 +15,7 @@ With the use of this MRO, ClassyLua offers you a handful of useful features such
 * `super()` - Access inherited classes directly
 * `is()` - Identify if a class or object is equivalent to or a subclass of a given class
 * `typeof()` - A more robust typeof method with support for ClassyLua
+* `from()` - Convert a Roblox instance class to a ClassyLua class
 * Metamethod inheritance from inherited classes
 
 ## Fundamentals
