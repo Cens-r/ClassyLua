@@ -82,6 +82,18 @@ function Utils.tostring(subject: Types.Object | Types.Super)
 end
 
 --[[
+	Custom typeof method which checks tables' __type attribute.
+]]
+function Utils.typeof(value: any)
+	local valueType = typeof(value)
+	if valueType == "table" then
+		local customType = value.__type
+		return customType or valueType
+	end
+	return valueType
+end
+
+--[[
 	Linearizes a given set of classes using C3 Linearization.
 	Errors if no the set can't be linearized.
 	
@@ -154,5 +166,70 @@ function Utils.Linearize(class: Types.Class, ...: Types.Class)
 	return result
 end
 
+--[[
+	Wraps a provided function with the ability to
+	convert objects of the Super type to the Object type.
+]]
+function Utils.ProcessMethod(method: any)
+	local previous = method
+	method = function (arg, ...)
+		if Utils.typeof(arg) == Types.Super then
+			arg = arg.__object
+		end
+		return previous(arg, ...)
+	end
+	return method
+end
+
+--[[
+	Wraps a provided function with the ability to
+	use the __entity property from objects of the
+	Super and Object types.
+]]
+function Utils.ProcessInstanceMethod(method: any)
+	local previous = method
+	method = function (arg, ...)
+		local argType = Utils.typeof(arg)
+		if argType == Types.Object then
+			arg = arg.__entity
+		elseif argType == Types.Super then
+			arg = arg.__object.__entity
+		end
+		return previous(arg, ...)
+	end
+	return method
+end
+
+--[[
+	A generic cleanup method.
+	Used to cleanup a table of items of various types.
+	
+	Supports: Nested Tables, Instances, Connections, Objects
+]]
+function Utils.GenericCleanup(tbl: Types.AnyTable)
+	for _, value in tbl :: {} do
+		local valueType = Utils.typeof(value)
+		-- Table: Recursively search
+		if valueType == "table" then
+			Utils.GenericCleanup(tbl)
+
+			-- Instance: Destroy()
+		elseif valueType == "Instance" then
+			(value :: Instance):Destroy()
+
+			-- Connection: Disconnect()
+		elseif valueType == "RBXScriptConnection" then
+			(value :: RBXScriptConnection):Disconnect()
+
+			-- Object: Object.destroy()
+		elseif valueType == Types.Object then
+			(value :: Types.Object):__destroy()
+
+			-- Anything else, skip!
+		else
+			continue
+		end
+	end
+end
 
 return Utils

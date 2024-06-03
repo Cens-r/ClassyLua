@@ -17,20 +17,17 @@ export type Super = Types.Super
 -- Class Module:
 local Class = {} :: {
 	types: TypeTable,
-	cache: Types.AnyTable,
 	
 	new: (string?) -> Class,
-	configure: (Class) -> Types.SetupMethod,
+	configure: (Class, boolean?) -> Types.SetupMethod,
 	super: (Class, (Object | Super)) -> Super,
+	
+	from: (string, string?) -> Class,
 	
 	typeof: (any) -> (string | Types.AnyTable),
 	is: ((Class | Object | Super), (Class | string)) -> boolean,
-	trace: (Class | Object | Super | Types.AnyTable) -> (Types.AnyTable)
+	trace: (Class | Object | Super | Types.AnyTable) -> Types.AnyTable?
 }
-
--- Stores all the class attributes in `[key]: boolean` pairs
---- Lowers cost of indexing keys not in the inheritance tree
-Class.cache = setmetatable({}, { __mode = "k" })
 
 -- All the type objects used by ClassyLua
 Class.types = {
@@ -40,6 +37,9 @@ Class.types = {
 	Super = Types.Super
 }
 type TypeTable = typeof(Class.types)
+
+-- Passing through the typeof method
+Class.typeof = Utils.typeof
 
 --[[
 	Constructor for ClassyLua's custom Class objects.
@@ -56,6 +56,7 @@ function Class.new(name: string?)
 	
 	struct.__mro = { struct }
 	struct.__mrosize = 1
+	struct.__custom = {}
 	struct.__metamethods = {}
 	
 	local neglected: Class = setmetatable(struct, {
@@ -66,24 +67,7 @@ function Class.new(name: string?)
 			return Utils.warn(Messages.neglectedIndex, index)
 		end
 	}) :: any
-	
-	(Class.cache :: {})[neglected] = {}
 	return neglected
-end
-
---[[
-	Wraps a provided function with the ability to
-	convert objects of the Super type to the Object type.
-]]
-local function ProcessMethod(method: any)
-	local previous = method
-	method = function (arg, ...)
-		if Class.typeof(arg) == Class.types.Super then
-			arg = arg.__object
-		end
-		return previous(arg, ...)
-	end
-	return method
 end
 
 --[[
@@ -95,10 +79,6 @@ end
 local function Search(class: Class, index: any, offset: number): (any, Types.AnyTable?)
 	for num = offset, class.__mrosize do
 		local base = class.__mro[num]
-		
-		local cache = (Class.cache :: {})[base]
-		if not cache[index] then continue end
-		
 		local value = (base.__self :: {})[index]
 		if value == nil then continue end
 		return value, base.__self
@@ -113,29 +93,51 @@ end
 ]]
 local function Index(class: Class, index: any)
 	local value = (class.__self :: {})[index]
-	return if value ~= nil then value else Search(class, index, 2)
+	if value ~= nil then return value end
+	
+	local custom = (class.__custom :: {})[index]
+	if custom ~= nil then return custom end
+	
+	local instance = rawget(class :: any, "__instance")
+	if instance then
+		local success, result = pcall(function ()
+			return (instance :: any)[index]
+		end)
+		if success and typeof(result) == "function" then
+			return Utils.ProcessInstanceMethod(result)
+		end
+	end
+	
+	return Search(class, index, 2)
 end
 
 --[[
 	Searches for the given index and sets it to a value.
-	This method applies changes to the cache and processes functions.
 ]]
 local function NewIndex(class: Class, index: any, value: any)
+	local instance = class.__instance
 	if typeof(value) == "function" then
-		value = ProcessMethod(value)
+		value = if instance == nil then Utils.ProcessMethod(value) else Utils.ProcessInstanceMethod(value)
 	end
+	
 	local current = (class.__self :: {})[index]
 	if current ~= nil then
 		(class.__self :: {})[index] = value
-	else
-		local _, source = Search(class, index, 2)
-		if source ~= nil then
-			(source :: {})[index] = value
-			return
-		end
-		rawset(class.__self :: {}, index, value)
+		return
 	end
-	(Class.cache :: {})[class][index] = if value ~= nil then value else nil
+	
+	local custom = (class.__custom :: {})[index]
+	if custom ~= nil then
+		(class.__custom :: {})[index] = value
+		return
+	end
+	
+	local _, source = Search(class, index, 2)
+	if source ~= nil then
+		(source :: {})[index] = value
+		return
+	end
+	rawset(class.__self :: {}, index, value)
 end
 
 --[[
@@ -150,17 +152,19 @@ local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 		class.__type = Class.types.Class
 		
 		local metamethods = class.__metamethods
-		class.__self = setmetatable({}, { __index = metamethods })
+		class.__self = setmetatable({}, { __index = metamethods });
+		(class.__custom :: any).new = function (...)
+			return class:__new(...)
+		end
 		
 		for key, value in impl do
-			(Class.cache :: {})[class][key] = true
 			local valueType = Class.typeof(value)
 			if valueType == "function" then
 				if Utils.LuaMetamethods[key] then
 					(metamethods :: {})[key] = value
 					continue
 				end
-				value = ProcessMethod(value)
+				value = Utils.ProcessMethod(value)
 			end
 			rawset(class.__self :: {}, key, value)
 		end
@@ -168,9 +172,11 @@ local function Implement(info: Types.ConfigureInfo): Types.ImplementMethod
 		class.__new = Object.new
 		class.__search = Search
 		
+		
+		local useExpandedMeta = (class.__mrosize > 1) or (rawget(class :: any, "__instance") ~= nil)
 		local meta = getmetatable(class)
-		meta.__index = if (class.__mrosize > 1) then Index else class.__self
-		meta.__newindex = if (class.__mrosize > 1) then NewIndex else class.__self
+		meta.__index = if useExpandedMeta then Index else class.__self
+		meta.__newindex = if useExpandedMeta then NewIndex else class.__self
 		return setmetatable(class :: any, meta)
 	end
 end
@@ -189,6 +195,10 @@ local function Inherit(info: Types.ConfigureInfo, ...: Class)
 	local superClass = neglected.__mro[2]
 	if superClass then
 		neglected.__metamethods = table.clone(superClass.__metamethods)
+		local instance = rawget(superClass :: any, "__instance")
+		if instance ~= nil then
+			neglected.__instance = instance
+		end
 	end
 	return Implement(info)
 end
@@ -246,11 +256,10 @@ end
 
 --[[
 	Searches for the given index and sets it to a value.
-	This method applies changes to the cache and processes functions.
 ]]
 local function SuperNewIndex(super: Super, index: any, value: any)
 	if typeof(value) == "function" then
-		value = ProcessMethod(value)
+		value = Utils.ProcessMethod(value)
 	end
 	local class = super.__object.__class
 	local _, source = Search(class, index, super.__offset)
@@ -260,7 +269,6 @@ local function SuperNewIndex(super: Super, index: any, value: any)
 	end
 	local superClass = class.__mro[super.__offset]
 	rawset(superClass.__self :: {}, index, value);
-	(Class.cache :: {})[superClass][index] = if value ~= nil then value else nil;
 end
 
 --[[
@@ -297,15 +305,37 @@ function Class.super(class: Class, subject: (Object | Super))
 end
 
 --[[
-	Custom typeof method which checks tables' __type attribute.
+	Constructs a ClassyLua class from a given Instance class name.
+	Optionally provide a custom name for the class as the
+	second argument.
 ]]
-function Class.typeof(value: any)
-	local valueType = typeof(value)
-	if valueType == "table" then
-		local customType = value.__type
-		return customType or valueType
+function Class.from(className: string, name: string?)
+	local class = Class.new(name)
+	local success, instance = pcall(Instance.new, className)
+	if not success then
+		Utils.error(Messages.invalidClassName, className)
 	end
-	return valueType
+	
+	local function ReplaceInstance()
+		Utils.warn(Messages.classInstanceDestroy)
+		local replacement = Instance.new(className)
+		class.__instance = replacement
+		replacement.Destroying:Connect(ReplaceInstance)
+	end
+	
+	class.__custom = {
+		ClassName = class.__name,
+		Destroy = Object.destroy,
+		destroy = Object.destroy,
+		Clone = Object.clone,
+		clone = Object.clone,
+		IsA = Class.is
+	}
+	class.__instance = instance
+	instance.Destroying:Connect(ReplaceInstance)
+	
+	Class.configure(class) {}
+	return class
 end
 
 --[[
@@ -326,7 +356,6 @@ function Class.is(subject: (Class | Object | Super), classType: (Class | string)
 	elseif subjectType == Class.types.Object then
 		class = (subject :: Object).__class
 	else
-		-- TODO: Warn user about supplying a non-ClassyLua type
 		return false
 	end
 	
@@ -344,6 +373,7 @@ end
 	without metamethods like __tostring interfering.
 ]]
 function Class.trace(subject: (Class | Object | Super | Types.AnyTable))
+	if not subject then return nil end
 	return setmetatable(table.clone(subject :: any), {})
 end
 

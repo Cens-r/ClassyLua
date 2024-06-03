@@ -8,6 +8,12 @@ local MESSAGES = {
 	superInvalidClass = "The class provided to 'Class.super()' was not found within the object's inheritance path!",
 	superOutOfBound = "The offset calculated for 'Class.super()' was out of the bounds of the class's mro!",
 	
+	destroyedUse = "The object you're attempting to use has already been destroyed!",
+	alreadyDestroyed = "Attempting to destroy an object that has already been destroyed!",
+	
+	invalidClassName = "The class name (%s) you provided is not a valid Instance class!",
+	classInstanceDestroy = "Attempting to destroy a class's reference instance. This instance is used for method reference and thus destroying it isn't allowed.",
+	
 	missingID = "There is no error message assigned to id: %s"
 }
 type MessageTable = typeof(MESSAGES)

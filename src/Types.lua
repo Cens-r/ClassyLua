@@ -44,6 +44,7 @@ type ClassStruct = {
 	__type: typeof(Types.Class),
 	__name: string,
 	
+	__custom: AnyTable,
 	__self: AnyTable,
 	__metamethods: AnyTable,
 	
@@ -51,7 +52,10 @@ type ClassStruct = {
 	__mrosize: number,
 	
 	__new: ObjectConstructor,
-	__search: Pass<any>
+	__search: Pass<any>,
+	
+	-- Used exclusively for Class.from()
+	__instance: Instance?,
 }
 export type Class = typeof(setmetatable({} :: ClassStruct, {} :: ClassMeta))
 
@@ -62,7 +66,12 @@ type ObjectMeta = {
 type ObjectStruct = {
 	__type: typeof(Types.Object),
 	__class: Class,
-	__self: AnyTable
+	__self: AnyTable,
+	__cleanup: AnyTable,
+	__destroy: (Object) -> (),
+	
+	-- Used exclusively for Class.from()
+	__entity: Instance?
 }
 export type Object = typeof(setmetatable({} :: ObjectStruct, {} :: ObjectMeta))
 export type ObjectConstructor = (Class, ...any) -> Object
