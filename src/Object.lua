@@ -103,12 +103,18 @@ function Object.new(class: Types.Class, ...:any)
 			if previous ~= nil then
 				local result = previous(nil, index)
 				if result ~= nil then return result end
+			else
+				-- NOTE: class.__custom??
+				local value = (class.__self :: {})[index]
+				if value ~= nil then return value end
 			end
 			
 			-- Search Class:
 			return class:__search(index, 2)
 		end
 	end
+	
+	-- NOTE: class.__custom??
 	setmetatable(struct.__self, { __index = indexMethod or class.__self, __newindex = newindexMethod })
 	
 	local meta = table.clone(class.__metamethods)
@@ -158,7 +164,7 @@ function Object.destroy(object: Types.Object)
 end
 
 function Object.clone()
-	
+	-- TODO: Implement this
 end
 
 return Object
